@@ -1,0 +1,38 @@
+{
+  "name": "Letmess",
+  "version": "0.0.1",
+  "preferGlobal": "true",
+  "author": "Goku Gong <gokugong@gmail.com>",
+  "description": "collaborative drawing game",
+  "contributors": [ 
+    {
+      "name": "Goku Gong",
+      "email": "gokugong@gmail.com"
+    } 
+  ],
+  "homepage": "http://letmess.com",
+  "scripts": {
+    "start": "node ./letmessd.js"
+  },
+  "main": "./letmessd.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gokugong/letmess.git"
+  },
+  "keywords": [
+    "collaborative",
+    "http",
+    "drawing",
+    "nodejs"
+  ],
+  "dependencies" : {
+    "d3":  ">=2.9.x",
+    "socket.io":  ">=0.9.x",
+    "socket.io-client":  ">=0.9.x"
+  },
+  "analyze": false,
+  "license": "MIT",
+  "engines": {
+    "node": ">=0.6"
+  }
+}

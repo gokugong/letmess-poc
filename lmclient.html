@@ -1,0 +1,178 @@
+<!doctype html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta name="keywords" content="node.js socket.io jquery d3.js couchdb javascript collaborative" />
+  <meta name="description" content="This is a little collaborative typing game that can be played by as many players. Press any key, the key code will show up in a random placed circle. The color is randomly selected for each player and will re-generate upon refresh. Whatever key typed by one player will be simultaneously shown on the screen of every player. The play history is timestamped and can be retrieved upon refresh. It will show the number of players currently online at the bottom.">
+  <meta name="author" content="Goku Gong" />
+  <meta name="copyright" content="Copyright &copy; 2012 by Goku Gong. MIT Licensed." />
+  <meta name="robots" content="follow, noodp, noydir, noarchive" />
+  <meta name="viewport" content="width=device-width" />
+
+  <title>Letmess-PoC</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/javascripts/d3.v2.js"></script>
+  <script src="/javascripts/jquery.min.js"></script>
+</head>
+
+<body><div align='center' style='font-family:sans-serif'>
+  <h2>Type something</h2>
+  <div id='myCanvas'></div>
+  <div id='footnote'></div>
+
+<script type='text/javascript'>
+/**
+ * Created by: Goku Gong <gokugong@gmail.com>
+ * MIT Licensed.
+ */
+
+// constants
+var MY_CANVAS_WIDTH = 600;
+var MY_CANVAS_HEIGHT = 300;
+var MY_CIRCLE_RADIUS = 15;
+var MY_TEXT_FONT = "0.3em";
+
+var MY_COLORS = [
+  'red', 'yellow', 'green', 'blue',
+  'aliceblue', 'antiquewhite', 'aqua',
+  'azure', 'beige', 'bisque', 'blanchedalmond',
+  'brown', 'burlywood', 'coral', 'cornflowerblue',
+  'cyan', 'gold', 'goldenrod', 'gray', 'greenyellow',
+  'honeydew', 'hotpink', 'indianred', 'indigo', 'lightblue',
+  'lightcoral', 'lightcyan', 'lightgoldenrodyellow', 'lightgreen',
+  'lightgrey', 'lightpink', 'lightsalmon', 'lightseagreen',
+  'lightskyblue', 'lightslategray', 'lightsteelblue', 'lightyellow',
+  'lime', 'limegreen', 'linen', 'magenta', 'maroon', 'mediumaquamarine',
+  'mediumblue', 'mediumorchid', 'mediumpurple', 'mediumseagreen',
+  'mediumslateblue', 'mediumspringgreen', 'mediumturquoise',
+  'mediumvioletred', 'midnightblue', 'mintcream', 'mistyrose',
+  'moccasin', 'navajowhite', 'navy', 'oldlace', 'olive', 'olivedrab',
+  'orange', 'orangered', 'orchid', 'palegoldenrod', 'palegreen',
+  'paleturquoise', 'palevioletred', 'papayawhip', 'peachpuff',
+  'peru', 'pink', 'plum', 'powderblue', 'purple', 'red', 'rosybrown',
+  'royalblue', 'saddlebrown', 'salmon', 'sandybrown', 'seagreen',
+  'seashell', 'sienna', 'silver', 'skyblue', 'slateblue',
+  'slategray', 'snow', 'springgreen', 'steelblue', 'tan', 'teal',
+  'thistle', 'tomato', 'turquoise', 'violet', 'wheat',
+  'white', 'whitesmoke', 'yellow', 'yellowgreen',
+];
+
+// get a random color per reload
+var myColor = MY_COLORS[Math.floor(Math.random() * MY_COLORS.length)];
+
+// provide client side caching: data hitory
+var points = [];
+
+// my client id. not to be confused with user id (TODO)
+var mySocketId;
+var totalClients;
+
+// point/stroke id. assigned by client. used for client side 
+// cache updates.
+var myPointId = 1;
+
+// open socket
+var socket = io.connect('http://192.168.0.108');
+
+// get socket id from server
+socket.on('socketid', function(data) {
+  mySocketId = data.socket_id;
+});
+
+// get total number of connected clients, i.e., live players
+socket.on('totalclients', function(data) {
+  totalClients = data.total_clients;
+  $('#footnote').html('Total players: ' + totalClients);
+});
+
+// sync client side cache with server cached data
+socket.on('synchistory', function(data) {
+  points = data.history;
+  redraw(points);
+});
+
+// get updates from other clients. pushed by server
+socket.on('notification', function(data) {
+  draw(data);
+  history(data);
+});
+
+// init canvas
+var cv = d3.select('#myCanvas')
+.append('svg')
+.attr('width', MY_CANVAS_WIDTH)
+.attr('height', MY_CANVAS_HEIGHT);
+
+// catch key pressed event. capture the key code.
+// generate a random point.
+d3.select(window).on('keydown', function() {
+  var point = {
+    'x': Math.floor(Math.random() * MY_CANVAS_WIDTH),
+    'y': Math.floor(Math.random() * MY_CANVAS_HEIGHT),
+    'kc': d3.event.keyCode,
+    'color': myColor,
+    'client_id': mySocketId,
+    'point_id': myPointId++,
+    'user_id': 'TBD',
+    'timestamp': 'to be set by server'
+  };
+
+  draw(point);
+
+  //TODO: cache first. update timestamps from server
+  // id' by (client_id, point_id)
+  //history(point);
+
+  // notify server
+  socket.emit('newpoint', point);
+});
+
+// caching
+function history(data) {
+  points.push(data);
+};
+
+function draw(data) {
+  redraw([data]);
+}
+
+// draw a circle with associated key code per point.
+// if more than one point, draw in order.
+function redraw(points) {
+  if (points == undefined || points.length == 0) return;
+
+  var g = cv.selectAll('.data').data(points)
+    .enter().append('g')
+    .attr('render-order', function(d, i) { return i + 1; })
+    .attr('tranform', 
+      function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+
+  var circle = g.append('circle')
+    .attr('cx', function(d) { return d.x; })
+    .attr('cy', function(d) { return d.y; })
+    .attr('r', 1e-6)
+    .style('stroke', 'black')
+    .attr('opacity', 1e-6)
+    .style('fill', function(d) { return d.color; });
+
+  var text = g.append('text')
+    .attr('x', function(d) { return d.x; } )
+    .attr('y', function(d) { return d.y; } )
+    .attr('dy', '.01em')
+    .style('fill', 'black')
+    .attr('text-anchor', 'middle')
+    .attr('opacity', 1e-6)
+    .text(function(d) { return d.kc; });
+
+  // animation
+  var t = g.transition().duration(function(d, i) { return (i + 1) * 500; })
+    .delay(function(d, i) { return i * 50; });
+
+  t.select('circle').attr('r', MY_CIRCLE_RADIUS).attr('opacity', 1);
+  t.select('text').attr('dy', MY_TEXT_FONT).attr('opacity', 1);
+};
+
+</script>
+
+</div> </body>
+</html>
